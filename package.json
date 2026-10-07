@@ -1,0 +1,22 @@
+{
+  "name": "ts-codemode",
+  "private": true,
+  "license": "WTFPL",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8800",
+    "deploy": "wrangler deploy",
+    "size": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261007.1",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.148.0"
+  },
+  "dependencies": {
+    "@cloudflare/codemode": "0.5.3"
+  }
+}
