@@ -6,12 +6,31 @@ A Cloudflare Worker for a code mode in which the model writes **TypeScript**. [t
 
 The ts-rust WASM module and its JavaScript host layer come from [`cf-ts-rust`](https://github.com/gingerhendrix/cf-ts-rust). This repo has a copy. See [`src/ts-rust/VENDORED.md`](src/ts-rust/VENDORED.md).
 
+## What the type gate gives you
+
+The model gets tsc errors for every input and output schema mistake before any code runs. The tools need no run-time validation step: the gate is the check.
+
+`POST /?gate=off` runs the same code as Cloudflare's JavaScript code mode would. There is no type check, and each tool checks its input when it is called. `test/schema-errors.test.ts` sends the same scripts to both modes:
+
+| Mistake | `POST /` (type gate) | `POST /?gate=off` (baseline) |
+|---|---|---|
+| Wrong input type, after a write | TS2322 at the line and column. Nothing runs. | Run-time error. The write before it already happened. |
+| Missing or misspelled input property, enum value | TS2741, TS2353, TS2322 | Run-time error when that call runs |
+| Misspelled output property (`c.captial`) | TS2551: "Did you mean 'capital'?" | `ok: true`, result `"Capital: undefined"` |
+| Result object used as a value (`r + 1`) | TS2365 | `ok: true`, result `"[object Object]1"` |
+| Wrapper object used as an array (`keys.length`) | TS2339 | `ok: true`, result `undefined` |
+| Nullable output used without a check | TS18047 | Run-time `TypeError`, only when the value is null |
+| Two mistakes on one line | Both errors in one reply | The first only, with a misleading message |
+
+The gate also rejects the ways to switch the checker off: explicit `any`, `as unknown as`, and `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck` comments (`src/escapes.ts`, codes TS90001 to TS90003). `JSON.parse` returns `unknown`, so its value must be narrowed before a tool call. The escape scan is lexical. It stops mistakes and shortcuts, but it is not a security boundary. The sandbox is.
+
 ## How it works
 
 ```text
 POST / { code }
   1. typegate.ts   blank one markdown fence, wrap the code in an async function,
-                   run tsc once in a fresh ts-rust instance (noEmitOnError):
+                   run tsc once in a fresh ts-rust instance (noEmitOnError),
+                   and scan for any, "as unknown as" and @ts-ignore (escapes.ts):
                    errors    -> diagnostics at the model's lines, nothing runs
                    no errors -> the emitted JavaScript
   2. run.ts        codemode normalizeCode -> DynamicWorkerExecutor
@@ -23,10 +42,12 @@ POST / { code }
 | File | Job |
 |---|---|
 | `src/index.ts` | The Worker. `GET /` gives the tool definition. `POST /` checks and runs. |
-| `src/tools.ts` | Demo tools on the host: a key-value store (`kvGet`, `kvSet`, `kvList`), `calculate` and `lookupCountry`. Each has input and output JSON Schemas. |
+| `src/tools.ts` | Demo tools on the host: a key-value store (`kvGet`, `kvSet`, `kvList`), `calculate` and `lookupCountry`. Each has input and output JSON Schemas. They trust their inputs, because the gate checked them. |
 | `src/declarations.ts` | `tools.d.ts` from codemode's `generateTypesFromJsonSchema`, a `console` declaration, and the model-facing description. |
 | `src/typegate.ts` | Check and emit in one `tsc` run. |
 | `src/diagnostics.ts` | Maps ts-rust diagnostics back to the model's lines and columns. |
+| `src/escapes.ts` | Finds explicit `any`, `as unknown as` and type-checking directive comments in the model's code. |
+| `src/baseline.ts` | The `?gate=off` comparison mode: a run-time JSON Schema input check in front of each tool. |
 | `src/run.ts` | Runs the JavaScript with `DynamicWorkerExecutor`. |
 | `src/ts-rust/` | Vendored `ts_rust.wasm`, `core.js` and `core.d.ts`. |
 
