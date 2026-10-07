@@ -4,7 +4,6 @@
 import tsRust from "./ts-rust/ts_rust.wasm";
 import { memoryFileSystem, runTsc } from "./ts-rust/core.js";
 import { mapDiagnostic, type GateDiagnostic, type SourceLayout } from "./diagnostics";
-import { findEscapes } from "./escapes";
 
 const MAIN_PATH = "/app/main.ts";
 const EMIT_PATH = "/app/main.js";
@@ -87,11 +86,7 @@ export function typecheckAndEmit(code: string, toolsDts: string): GateResult {
     stderr: (chunk: Uint8Array) => (stderr += decoder.decode(chunk)),
   });
 
-  // tsc accepts `any` and @ts-ignore, so a separate scan rejects them. Both lists
-  // go back together, in source order, so the model can fix everything at once.
-  const diagnostics = [...(result.diagnostics ?? []).map((d) => mapDiagnostic(d, layout)), ...findEscapes(source)].sort(
-    (a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.column ?? 0) - (b.column ?? 0),
-  );
+  const diagnostics = (result.diagnostics ?? []).map((d) => mapDiagnostic(d, layout));
   const hasErrors = diagnostics.some((d) => d.category === "error");
   const emitted = fs.files.get(EMIT_PATH);
   const js = hasErrors || emitted === undefined ? undefined : unwrapEmit(emitted);

@@ -3,19 +3,15 @@
 // POST { code } type-checks the TypeScript and, only when it has no errors, runs it:
 //   { ok, phase: "typecheck" | "run", diagnostics?, result?, error?, logs?, timings, memory? }
 // POST /?gate=off { code } is the baseline for comparison: it runs the code as
-// JavaScript with no type check, and the tools check their inputs at run time.
-import { withInputValidation } from "./baseline";
+// JavaScript with no type check. The tools check their inputs at run time in both modes.
 import { describeCodeTool, TOOLS_DTS } from "./declarations";
 import { formatDiagnostics } from "./diagnostics";
 import { runInDynamicWorker } from "./run";
-import { demoTools } from "./tools";
 import { typecheckAndEmit } from "./typegate";
 
 export type CodemodeEnv = { LOADER: WorkerLoader };
 
 let requestsInIsolate = 0;
-
-const baselineTools = withInputValidation(demoTools);
 
 function mib(bytes: number) {
   return +(bytes / 2 ** 20).toFixed(1);
@@ -47,7 +43,7 @@ async function handleCodemode(request: Request, env: CodemodeEnv): Promise<Respo
   });
 
   if (new URL(request.url).searchParams.get("gate") === "off") {
-    const run = await runInDynamicWorker(code, env.LOADER, baselineTools);
+    const run = await runInDynamicWorker(code, env.LOADER);
     return Response.json({
       ok: run.error === undefined,
       phase: "run",

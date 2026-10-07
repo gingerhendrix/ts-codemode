@@ -176,61 +176,26 @@ describeScenarios("input schema mistakes", inputScenarios);
 describeScenarios("output schema mistakes", outputScenarios);
 describeScenarios("mistakes across tools", mixedScenarios);
 
-describe("the tools trust the gate, so the gate closes the ways around it", () => {
-  test("explicit any, a double cast and @ts-ignore are errors, and nothing runs", async () => {
-    const key = uniqueKey("escape");
+describe("the run-time schema check still guards inputs that get past the types", () => {
+  test("an `as any` input passes the gate, and the schema check stops the call", async () => {
+    const key = uniqueKey("any");
     const json = await post(
       "/",
       [
         `await codemode.kvSet({ key: "${key}", value: "started" });`,
-        `const a = await codemode.calculate({ op: "add", a: "2" as any, b: 3 });`,
-        `const b = await codemode.calculate({ op: "add", a: "2" as unknown as number, b: 3 });`,
-        `// @ts-ignore`,
-        `const c = await codemode.calculate({ op: "add", a: "2", b: 3 });`,
-        `return [a, b, c];`,
+        `return await codemode.calculate({ op: "add", a: "2" as any, b: 3 });`,
       ].join("\n"),
     );
-    assert.equal(json.phase, "typecheck");
-    assert.deepEqual(
-      json.diagnostics.map((d: any) => [d.line, d.column, d.code]),
-      [
-        [2, 59, 90001],
-        [3, 56, 90002],
-        [4, 4, 90003],
-      ],
-    );
-    assert.match(json.error, /main\.ts:2:59 - error TS90001: Explicit 'any' is not allowed/);
-    assert.equal(await wasWritten(key), false);
+    assert.equal(json.phase, "run");
+    assert.equal(json.ok, false);
+    assert.match(json.error, /Invalid input for calculate: input\.a must be number, got string/);
+    assert.equal(await wasWritten(key), true);
   });
 
-  test("any inside strings, comments and property names is fine", async () => {
-    const json = await post(
-      "/",
-      [
-        `// any value works here`,
-        `const o = { any: "any" };`,
-        "const t = `${o.any} any`;",
-        `return t;`,
-      ].join("\n"),
-    );
-    assert.equal(json.ok, true, json.error);
-    assert.equal(json.result, "any any");
-  });
-
-  test("JSON.parse returns unknown, so its value must be narrowed before a tool call", async () => {
-    const unchecked = await post("/", `const n = JSON.parse("2");\nreturn await codemode.calculate({ op: "add", a: n, b: 3 });`);
-    assert.equal(unchecked.phase, "typecheck");
-    assert.deepEqual(
-      unchecked.diagnostics.map((d: any) => [d.line, d.code]),
-      [[2, 2322]],
-    );
-    assert.match(unchecked.diagnostics[0].message, /Type 'unknown' is not assignable to type 'number'/);
-
-    const narrowed = await post(
-      "/",
-      `const n = JSON.parse("2");\nif (typeof n !== "number") throw new Error("not a number");\nreturn (await codemode.calculate({ op: "add", a: n, b: 3 })).result;`,
-    );
-    assert.equal(narrowed.ok, true, narrowed.error);
-    assert.equal(narrowed.result, 5);
+  test("a JSON.parse value passes the gate, and the schema check stops the call", async () => {
+    const json = await post("/", `const n = JSON.parse('"2"');\nreturn await codemode.calculate({ op: "add", a: n, b: 3 });`);
+    assert.equal(json.phase, "run");
+    assert.equal(json.ok, false);
+    assert.match(json.error, /Invalid input for calculate: input\.a must be number, got string/);
   });
 });

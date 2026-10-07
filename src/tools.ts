@@ -1,10 +1,11 @@
 // Demo tools on the host. They are deterministic and each one has an input and an
 // output JSON Schema, so the generated declarations are typed in both directions.
 //
-// The tools do not validate their inputs at run time. The type gate is the input
-// check: code runs only when tsc proves that every call matches the input schema,
-// and every use of a result matches the output schema. The host types below
-// mirror the schemas, so `bun run typecheck` checks the outputs on this side.
+// The type gate runs code only when tsc proves that every call matches the input
+// schema, and every use of a result matches the output schema. run.ts also checks
+// each input against its schema at run time (validate.ts), so execute can trust
+// its typed input. The host types below mirror the schemas, so
+// `bun run typecheck` checks the outputs on this side.
 import type { JsonSchemaToolDescriptor } from "@cloudflare/codemode";
 
 type Tool<Input, Output> = JsonSchemaToolDescriptor & {

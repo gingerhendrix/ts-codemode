@@ -1,8 +1,8 @@
-// The baseline for comparison: Cloudflare's JavaScript code mode, with no type gate.
-// Stock codemode validates each tool input at call time when the tool has a schema
-// (the AI SDK path wraps execute in schema.validate). These tools do the same with
-// a small JSON Schema check, so a `?gate=off` run behaves like stock codemode:
-// input errors appear only when the bad call runs, and outputs are never checked.
+// Run-time input checks from each tool's JSON Schema, as stock codemode does
+// (the AI SDK path wraps execute in schema.validate). Both modes use them. The
+// type gate finds input and output mistakes before anything runs. This check is
+// the second line for inputs that reach a tool in spite of the types, for example
+// through `as any` or a value from JSON.parse.
 import type { DemoTool } from "./tools";
 
 type Schema = {
